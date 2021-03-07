@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: spending-worker
+  name: spending-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spending-worker
+  strategy: { }
+  template:
+    metadata:
+      labels:
+        app: spending-worker
+    spec:
+      volumes:
+        - name: google-cloud-key
+          secret:
+            secretName: pubsub-key
+        - name: secrets
+          secret:
+            secretName: spending-worker
+      containers:
+        - image: peterulb/spending-worker:0.0.1-SNAPSHOT
+          name: spending-worker
+          volumeMounts:
+            - mountPath: /etc/secrets/google
+              name: google-cloud-key
+              readOnly: true
+            - mountPath: /etc/secrets/deployment
+              name: secrets
+              readOnly: true
+          env:
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /etc/secrets/google/key.json
+            - name: SPRING_PROFILES_ACTIVE
+              value: "dev"
+#           - name: DB_USER
+#             valueFrom:
+#               secretKeyRef:
+#                 name: spending-worker-secret
+#                 key: db_username
+          livenessProbe:
+            httpGet:
+              port: 8080
+              path: /alive
+              httpHeaders:
+                - name: x-b3-sampled
+                  value: "0"
+          readinessProbe:
+            httpGet:
+              port: 8080
+              path: /actuator/health
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: spending-worker
+  name: spending-worker
+spec:
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: spending-worker
+  type: NodePort
